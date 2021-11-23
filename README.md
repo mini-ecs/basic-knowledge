@@ -208,3 +208,74 @@ brw-rw----  1 root disk     43,   1 Nov 21 11:03 nbd0p1
 brw-rw----  1 root disk     43,   2 Nov 21 11:03 nbd0p2
 ```
 
+确保nbd设备在对应的位置：
+
+```shell
+ubuntu@foo:/mnt$ ls -la /mnt/dev/ | grep nbd0
+brw-rw----  1 root disk     43,   0 Nov 25 09:36 nbd0
+brw-rw----  1 root disk     43,   1 Nov 25 09:36 nbd0p1
+brw-rw----  1 root disk     43,   2 Nov 25 09:36 nbd0p2
+```
+
+
+
+
+
+
+
+# 使用libvirt管理kvm
+
+安装libvirt
+
+```shell
+apt install libvirt-daemon-system libvirt-clients
+```
+
+检查配置
+
+```shell
+root@foo:/home/ubuntu# pgrep -lfa libvirtd
+2028 /usr/sbin/libvirtd
+
+root@foo:/home/ubuntu# cat /etc/libvirt/lib
+libvirt-admin.conf  libvirtd.conf       libxl-sanlock.conf
+libvirt.conf        libxl-lockd.conf    libxl.conf
+
+root@foo:/home/ubuntu# cat /etc/libvirt/libvirtd.conf | grep -vi "#" | sed '/^$/d'
+unix_sock_group = "libvirt"
+unix_sock_ro_perms = "0777"
+unix_sock_rw_perms = "0770"
+auth_unix_ro = "none"
+auth_unix_rw = "none"
+```
+
+
+
+修改配置文件
+
+```shell
+vim /etc/libvirt/qemu.conf
+          ...
+security_driver = "none"
+```
+
+
+
+重启libvirt
+
+```
+root@foo:/home/ubuntu# service libvirtd restart
+```
+
+
+
+一些重要配置文件的说明：
+
+- `libvirt.conf`：客户端侧的配置文件。给后面要用到的`virtsh`做配置
+- `libvirtd.conf`：服务端的配置文件。提供安全、请求、日志控制。
+- `qemu.conf`：配置qemu驱动。
+- 在创建了QEMU/KVM虚拟机之后，可以在`etc/libvirt/qemu/`文件夹里看到这些虚拟机的XML配置
+- /etc/libvirt/qemu/networks 文件夹包含了网络配置文件
+
+
+

@@ -5,6 +5,7 @@ import reportWebVitals from './reportWebVitals';
 import Hello from './components/hello';
 import DealClick from './components/dealWithClick'
 import MyStateCom from './components/useStateComponent';
+import ControlComponent from './components/controlComponent';
 
 const songs = [
   { id: 1, name: "Love Story" },
@@ -46,6 +47,8 @@ let Root = () => {
     <DealClick/>
     <h1>有状态组件</h1>
     <MyStateCom/>
+    <h1>受控组件</h1>
+    <ControlComponent/>
   </div>
 }
 
