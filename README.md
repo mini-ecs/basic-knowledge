@@ -202,10 +202,6 @@ drwxr-xr-x 11 root root 4.0K Nov 21 12:19 var
 ```shell
 ubuntu@foo:~$ sudo mount --bind /dev/ /mnt/dev
 
-ubuntu@foo:~$ ls -la /mnt/dev/ | grep nbd0
-brw-rw----  1 root disk     43,   0 Nov 21 11:01 nbd0
-brw-rw----  1 root disk     43,   1 Nov 21 11:03 nbd0p1
-brw-rw----  1 root disk     43,   2 Nov 21 11:03 nbd0p2
 ```
 
 确保nbd设备在对应的位置：
@@ -216,6 +212,104 @@ brw-rw----  1 root disk     43,   0 Nov 25 09:36 nbd0
 brw-rw----  1 root disk     43,   1 Nov 25 09:36 nbd0p1
 brw-rw----  1 root disk     43,   2 Nov 25 09:36 nbd0p2
 ```
+
+
+
+切换根目录到 /mnt
+
+```sh
+# nn @ nn in ~/work [10:08:59] 
+$ sudo chroot /mnt                
+root@nn:/# pwd
+/
+root@nn:/# ls
+bin  boot  dev  etc  home  lib  lib32  lib64  libx32  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+root@nn:/# cat /etc/debian_version 
+11.1
+root@nn:/# 
+```
+
+
+
+将proc和sysfs两个虚拟文件系统挂载到当前的环境下
+
+```sh
+root@nn:/# mount -t proc none /proc
+root@nn:/# mount -t sysfs none /sys
+root@nn:/# 
+```
+
+
+
+安装debian的内核包和grub2
+
+```sh
+root@nn:/# apt-get install -y --force-yes linux-image-amd64 grub2
+```
+
+
+
+安装grub
+
+```sh
+root@nn:/# grub-install /dev/nbd0 --force
+Installing for i386-pc platform.
+Installation finished. No error reported.
+
+```
+
+更新grub
+
+```sh
+root@nn:/# update-grub2
+Generating grub configuration file ...
+Found linux image: /boot/vmlinuz-5.10.0-9-amd64
+Found initrd image: /boot/initrd.img-5.10.0-9-amd64
+Found Ubuntu 20.04.3 LTS (20.04) on /dev/sda2
+done
+
+```
+
+修改密码
+
+```sh
+root@nn:/# passwd
+New password: 
+Retype new password: 
+passwd: password updated successfully
+root@nn:/# 
+```
+
+允许访问客户机里的终端，并修改systemd的运行级别
+
+```sh
+root@nn:/# echo "pts/0" >> /etc/securetty
+root@nn:/# systemctl set-default multi-user.target
+Created symlink /etc/systemd/system/default.target → /lib/systemd/system/multi-user.target.
+root@nn:/# 
+```
+
+将root挂载点添加到fstab文件，这样的话就可以持久化地重启了
+
+```sh
+root@nn:/# echo "/dev/sda2 / ext4 defaults,discard 0 0" > /etc/fstab
+root@nn:/# 
+
+```
+
+取消挂载proc, sys, dev，并退出
+
+```sh
+root@nn:/# umount /proc /sys /dev
+root@nn:/# exit
+exit
+```
+
+
+
+1. ```
+   grub-install /dev/nbd0 --root-directory=/mnt --modules="biosdisk part_msdos" --force
+   ```
 
 
 

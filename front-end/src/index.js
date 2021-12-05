@@ -6,6 +6,8 @@ import Hello from './components/hello';
 import DealClick from './components/dealWithClick'
 import MyStateCom from './components/useStateComponent';
 import ControlComponent from './components/controlComponent';
+import Sider from './components/slider';
+import { BrowserRouter as Router, Route } from 'react-router-dom';
 
 const songs = [
   { id: 1, name: "Love Story" },
@@ -33,7 +35,7 @@ class MyClassElement extends React.Component {
 }
 
 
-let Root = () => {
+let Page1 = () => {
   return <div>
     <h1 className="list">列表渲染示例</h1>
     {listParse()}
@@ -42,14 +44,25 @@ let Root = () => {
     <h1>类组件示例</h1>
     <MyClassElement />
     <h1>单独文件里的类组件示例</h1>
-    <Hello/>
+    <Hello />
     <h1>React 事件处理</h1>
-    <DealClick/>
+    <DealClick />
     <h1>有状态组件</h1>
-    <MyStateCom/>
+    <MyStateCom />
     <h1>受控组件</h1>
-    <ControlComponent/>
+    <ControlComponent />
+    <Sider />
   </div>
+}
+
+let Root = () => {
+  return <Router>
+    <div>
+      <Route path="/" component="Page1" />
+      <Route path="/check" component="Sider" />
+
+    </div>
+  </Router>
 }
 
 
