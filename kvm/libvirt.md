@@ -774,8 +774,116 @@ libvirt 支持事件机制，在使用该机制注册之后，可以在发生特
 
 libvirt 还提供了一系列函数用于数据流的传输。
 
-
-
 对于 libvirt API 一些细节的使用方法和实现原理，可以参考其源代码。
 
 [[1\]](opeb://fe4d89f8fa873db44d15079bb4dec072/epubbook.xhtml#text00051.htmlch1) libvirt 官方网站上关于 libvirt API 的详细描述：http://libvirt.org/html/libvirt-libvirt.html。
+
+## 建立到 Hypervisor 的连接
+
+要使用 libvirt API 进行虚拟化管理，就必须先建立到 Hypervisor 的连接，因为有了连接才能管理节点、Hypervisor、域、网络等虚拟化中的要素。本节就介绍一下建立到 Hypervisor 连接的一些方式。
+
+对于一个 libvirt 连接，可以使用简单的客户端-服务器端（C/S）的架构模式来解释，一个服务器端运行着 Hypervisor，一个客户端去连接服务器端的 Hypervisor，然后进行相应的虚拟化管理。当然，如果通过 libvirt API 实现本地的管理，则客户端和服务器端都在同一个节点上，并不依赖于网络连接。一般来说（如基于 QEMU/KVM 的虚拟化方案），不管是基于 libvirt API 的本地管理还是远程管理，在服务器端的节点上，除了需要运行相应的 Hypervisor 以外，还需要让 libvirtd 这个守护进程处于运行中的状态，以便让客户端连接到 libvirtd，从而进行管理操作。不过，也并非所有的 Hypervisor 都需要运行 libvirtd 守护进程，比如 VMware ESX/ESXi 就不需要在服务器端运行 libvirtd，依然可以通过 libvirt 客户端以另外的方式 [[1\]](opeb://fe4d89f8fa873db44d15079bb4dec072/epubbook.xhtml#text00052.htmlch1_back) 连接到 VMware。
+
+由于支持多种 Hypervisor，libvirt 需要通过唯一的标识来指定如何才能准确地连接到本地或远程的 Hypervisor。为了达到这个目的，libvirt 使用了在互联网应用中广泛使用的 URI [[2\]](opeb://fe4d89f8fa873db44d15079bb4dec072/epubbook.xhtml#text00052.htmlch2_back) （Uniform Resource Identifier，统一资源标识符）来标识到某个 Hypervisor 的连接。libvirt 中连接的标识符 URI，其本地 URI 和远程 URI 有一些区别，下面分别介绍一下它们的使用方式。
+
+### 本地 URI
+
+在 libvirt 的客户端使用本地的 URI 连接本系统范围内的 Hypervisor，本地 URI 的一般格式如下：
+
+```
+driver[+transport]:///[path][?extral-param]
+```
+
+其中，driver 是连接 Hypervisor 的驱动名称（如 qemu、xen、xbox、lxc 等），transport 是选择该连接所使用的传输方式（可以为空，也可以是“unix”这样的值），path 是连接到服务器端上的某个路径，?extral-param 是可以额外添加的一些参数（如 Unix domain sockect 的路径）。
+
+在 libvirt 中 KVM 使用 QEMU 驱动。QEMU 驱动是一个多实例的驱动，它提供了一个系统范围内的特权驱动（即“system”实例）和一个用户相关的非特权驱动（即“session”实例）。通过“qemu：///session”这样的 URI 可以连接到一个 libvirtd 非特权实例，但是这个实例必须是与本地客户端的当前用户和用户组相同的实例，也就说，根据客户端的当前用户和用户组去服务器端寻找对应用户下的实例。在建立 session 连接后，可以查询和控制的域或其他资源都仅仅是在当前用户权限范围内的，而不是整个节点上的全部域或其他资源。而使用“qemu：///system”这样的 URI 连接到 libvirtd 实例，是需要系统特权账号“root”权限的。在建立 system 连接后，由于它是具有最大权限的，因此可以查询和控制整个节点范围内的域，还可以管理该节点上特权用户才能管理的块设备、PCI 设备、USB 设备、网络设备等系统资源。一般来说，为了方便管理，在公司内网范围内建立到 system 实例的连接进行管理的情况比较常见，当然为了安全考虑，赋予不同用户不同的权限就可以使用建立到 session 实例的连接。
+
+在 libvirt 中，本地连接 QEMU/KVM 的几个 URI 示例如下：
+
+- qemu：///session：连接到本地的 session 实例，该连接仅能管理当前用户的虚拟化资源。
+- qemu+unix：///session：以 Unix domain sockect 的方式连接到本地的 session 实例，该连接仅能管理当前用户的虚拟化资源。
+- qemu：///system：连接到本地的 system 实例，该连接可以管理当前节点的所有特权用户可以管理的虚拟化资源。
+- qemu+unix：///system：以 Unix domain sockect 的方式连接到本地的 system 实例，该连接可以管理当前节点的所有特权用户可以管理的虚拟化资源。
+
+### 远程 URI
+
+除了本地管理，libvirt 还提供了非常方便的远程的虚拟化管理功能。libvirt 可以使用远程 URI 来建立到网络上的 Hypervisor 的连接。远程 URI 和本地 URI 是类似的，只是会增加用户名、主机名（或 IP 地址）和连接端口来连接到远程的节点。远程 URI 的一般格式如下：
+
+```
+driver[+transport]://[user@][host][:port]/[path][?extral-param]
+```
+
+其中，transport 表示传输方式，其取值可以是 ssh、tcp、libssh2 等；user 表示连接远程主机使用的用户名，host 表示远程主机的主机名或 IP 地址，port 表示连接远程主机的端口。其余参数的意义与本地 URI 中介绍的完全一样。
+
+在远程 URI 连接中，也存在使用 system 实例和 session 实例两种方式，这二者的区别和用途，与本地 URI 中介绍的内容是完全一样的。
+
+在 libvirt 中，远程连接 QEMU/KVM 的 URI 示例如下：
+
+- qemu+ssh：//root@example.com/system：通过 ssh 通道连接到远程节点的 system 实例，具有最大的权限来管理远程节点上的虚拟化资源。建立该远程连接时，需要经过 ssh 的用户名和密码验证或者基于密钥的验证。
+- qemu+ssh：//user@example.com/session：通过 ssh 通道连接到远程节点的使用 user 用户的 session 实例，该连接仅能对 user 用户的虚拟化资源进行管理，建立连接时同样需要经过 ssh 的验证。
+- qemu：//example.com/system：通过建立加密的 TLS 连接与远程节点的 system 实例相连接，具有对该节点的特权管理权限。在建立该远程连接时，一般需要经过 TLS x509 安全协议的证书验证。
+- qemu+tcp：//example.com/system：通过建立非加密的普通 TCP 连接与远程节点的 system 实例相连接，具有对该节点的特权管理权限。在建立该远程连接时，一般需要经过 SASL/Kerberos 认证授权。
+
+### 使用 URI 建立到 Hypervisor 的连接
+
+某个节点启动 libvirtd 后，一般在客户端都可以通过 ssh 方式连接到该节点。而 TLS 和 TCP 等连接方式却不一定都处于开启可用状态，如 RHEL 7.3 系统中的 libvirtd 服务在启动时就默认没有打开 TLS 和 TCP 这两种连接方式。关于 libvirtd 的配置可以参考上文中的介绍。而在服务器端的 libvirtd 打开了 TLS 和 TCP 连接方式，也需要一些认证方面的配置，当然也可直接关闭认证功能（这样不安全），可以参考 libvirtd.conf 配置文件。
+
+我们看到，URI 这个标识还是比较复杂的，特别是在管理很多远程节点时，需要使用很多的 URI 连接。为了简化系统管理的复杂程度，可以在客户端的 libvirt 配置文件中为 URI 命名别名，以方便记忆，这在上文中已经介绍过了。
+
+在上文中已经介绍过，libvirt 使用 virConnectOpen 函数来建立到 Hypervisor 的连接，所以 virConnectOpen 函数就需要一个 URI 作为参数。而当传递给 virConnectOpen 的 URI 为空值（NULL）时，libvirt 会依次根据如下 3 条规则去决定使用哪一个 URI。
+
+- 试图使用 LIBVIRT_DEFAULT_URI 这个环境变量。
+- 试用使用客户端的 libvirt 配置文件中的 uri_default 参数的值。
+- 依次尝试用每个 Hypervisor 的驱动去建立连接，直到能正常建立连接后即停止尝试。
+
+当然，如果这 3 条规则都不能够让客户端 libvirt 建立到 Hypervisor 的连接，就会报出建立连接失败的错误信息（“failed to connect to the hypervisor”）。
+
+在使用 virsh 这个 libvirt 客户端工具时，可以用“-c”或“--connect”选项来指定建立到某个 URI 的连接。只有连接建立之后，才能够操作。使用 virsh 连接到本地和远程的 Hypervisor 的示例如下：
+
+```
+[root@kvm-host ~]# virsh -c qemu:///system
+Welcome to virsh, the virtualization interactive terminal.
+virsh # list
+ Id    Name                           State
+----------------------------------------------------
+ 1     rhel7u1-1                      running
+ 2     rhel7u2-2                      running
+
+virsh # quit
+
+[root@kvm-host ~]# virsh -c qemu+ssh://root@192.168.158.31/system
+root@192.168.158.31's password:
+Welcome to virsh, the virtualization interactive terminal.
+
+Type:  'help' for help with commands
+       'quit' to quit
+
+virsh # list
+ Id    Name                           State
+----------------------------------------------------
+ 1     rhel7u2-remote                 running
+
+virsh # quit
+```
+
+其实，除了针对 QEMU、Xen、LXC 等真实 Hypervisor 的驱动之外，libvirt 自身还提供了一个名叫“test”的傀儡 Hypervisor 及其驱动程序。test Hypervisor 是在 libvirt 中仅仅用于测试和命令学习的目的，因为在本地的和远程的 Hypervisor 都连接不上（或无权限连接）时，test 这个 Hypervisor 却一直都会处于可用状态。使用 virsh 连接到 test Hypervisor 的示例操作如下：
+
+```
+ [root@kvm-host ~]# virsh -c test:///default list
+ Id    Name                           State
+----------------------------------------------------
+ 1     test                           running
+
+[root@kvm-host ~]# virsh -c test:///default
+Welcome to virsh, the virtualization interactive terminal.
+
+Type:  'help' for help with commands
+       'quit' to quit
+
+virsh # list
+ Id    Name                           State
+----------------------------------------------------
+ 1     test                           running
+
+virsh # quit
+```
